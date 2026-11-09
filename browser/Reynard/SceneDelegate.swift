@@ -99,7 +99,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             return incomingURL
         }
         
-        guard scheme == "chatgpt",
+        guard scheme == "claude",
               let components = URLComponents(url: incomingURL, resolvingAgainstBaseURL: false),
               let encodedURL = components.queryItems?.first(where: { $0.name == "url" })?.value else {
             return nil
