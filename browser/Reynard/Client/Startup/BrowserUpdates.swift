@@ -20,14 +20,14 @@ final class BrowserUpdates: NSObject {
         super.init()
         
         guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
-        let sideloadIPA = docs.appendingPathComponent("ChatGPT.ipa")
+        let sideloadIPA = docs.appendingPathComponent("Claude.ipa")
         try? FileManager.default.removeItem(at: sideloadIPA)
         
         fetchUpdates()
     }
     
     private func fetchUpdates() {
-        // ChatGPT: disabled - upstream source.json would offer Reynard updates over ChatGPT
+        // Claude: disabled - upstream source.json would offer Reynard updates over Claude
         return
         DispatchQueue.global(qos: .background).async {
             guard let url = URL(string: Self.sourceURL),
