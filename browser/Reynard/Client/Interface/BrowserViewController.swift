@@ -169,8 +169,15 @@ final class BrowserViewController: UIViewController, GeckoScreenOrientationDeleg
         applyUpdateMenuButtonBadge()
         
         tabManager.createInitialTab()
-        // Claude: always open straight to Claude on launch
-        if let tab = tabManager.selectedTab, tab.url != "https://claude.ai" {
+        // Claude: always open straight to Claude on launch — but keep a
+        // restored session: only navigate when the selected tab is completely
+        // empty (a fresh tab). The old exact string check
+        // (`tab.url != "https://claude.ai"`) also matched every restored
+        // conversation URL ("https://claude.ai/...") and the normalized
+        // "https://claude.ai/", so it threw the open chat away on every
+        // launch. A restored conversation URL, or a URL opened from outside
+        // the app, is left alone.
+        if let tab = tabManager.selectedTab, (tab.url ?? "").isEmpty {
             tabManager.browse(to: "https://claude.ai", in: tab)
         }
         refreshAddressBar()
