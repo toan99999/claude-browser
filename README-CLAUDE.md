@@ -3,15 +3,18 @@
 Gốc: https://github.com/minh-ton/reynard-browser (Reynard 0.20.1, trình duyệt Gecko cho iOS 13+)
 Bản này: **Claude** — tên app `Claude`, Bundle ID `ai.claude.browser`, URL scheme `claude://`
 
-## Đã đổi gì (19 file sửa + 1 workflow mới, giống bản Muse/ChatGPT)
+## Đã đổi gì (19 file sửa + 1 workflow mới, giống bản Muse/ChatGPT — cộng thêm 3 lỗi sửa sau build #3)
 
 | Chức năng | Cách làm |
 |---|---|
-| Mở app vào thẳng Claude | `BrowserViewController.viewDidLoad`: sau `createInitialTab()` thì `browse(to: "https://claude.ai")` cho tab đang chọn. Tab mới cũng vậy: mặc định `NewTabSettings` đổi thành `.customURL` + `customNewTabURL = https://claude.ai` trong `BrowserPreferences.swift`. Màn hình mở đầu đổi từ `homepage` sang `lastTab` để không ép hiện trang chủ Reynard. |
+| Mở app vào thẳng Claude | `BrowserViewController.viewDidLoad`: sau `createInitialTab()` thì mở `https://claude.ai` cho tab đang chọn. Tab mới cũng vậy: mặc định `NewTabSettings` đổi thành `.customURL` + `customNewTabURL = https://claude.ai` trong `BrowserPreferences.swift`. Màn hình mở đầu đổi từ `homepage` sang `lastTab` để không ép hiện trang chủ Reynard. |
 | Luôn ẩn thanh công cụ | `BrowserChrome.apply`: ép `topState = .hidden`, `bottomState = .hidden` bất kể presentation/mode. `BrowserViewController.applyPhoneLayout / applyCompactLayout / applyPadLayout`: nội dung web neo vào mép màn hình (safe area) thay vì neo vào toolbar, nên web chiếm toàn màn hình. |
 | Chạm 3 ngón tay hiện/ẩn thanh công cụ | `BrowserChrome.isAddressBarVisible` (mặc định tắt) + cử chỉ chạm 3 ngón tay trong `BrowserViewController`: chạm 3 ngón thì thanh công cụ hiện lên, chạm lại thì ẩn đi; nội dung web tự co lại/tràn ra theo. |
 | Nút ← → khi thanh công cụ hiện | `updateNavigationButtons()`: chỉ khi thanh công cụ đang hiện (`isAddressBarVisible`) thì nút quay lại/tiến mới hoạt động theo lịch sử thật của tab (`canGoBack`/`canGoForward`); khi thanh công cụ ẩn thì cả hai nút đều tắt. Cử chỉ vuốt quay lại vẫn tắt hẳn. |
 | Hộp thoại xin quyền không tự từ chối trong im lặng | `PermissionPromptPresenter.findPresenter()`: khi trang web xin mic/camera mà app chưa tìm được màn hình để hiện hộp thoại (đang mở app hoặc chuyển màn hình), chờ tối đa ~3 giây cho scene lên foreground rồi mới hiện hộp thoại; chỉ từ chối khi hoàn toàn không có màn hình nào. Trước đây code trả về "từ chối" ngay khi `topViewController()` là nil, nên trang web có thể bị ghi vào danh sách từ chối dù mặc định là "Hỏi trước khi cho phép" (đã xảy ra với chatgpt.com lúc 09:17 ngày 2026-11-08 ở bản ChatGPT). |
+| Giữ phiên chat khi mở lại app | `BrowserViewController.viewDidLoad`: chỉ mở `https://claude.ai` khi tab đang hoàn toàn trống (tab mới, chưa có URL). Trước đây so sánh cứng `tab.url != "https://claude.ai"` còn khớp cả URL đoạn chat đã khôi phục (`.../c/...`) và URL đã chuẩn hóa (`...ai/`), nên mỗi lần mở lại app là đoạn chat đang mở bị vứt đi. |
+| Chia sẻ "Open in Claude" hoạt động | `OpenInViewController.browserOpenURL`: mở link chia sẻ bằng `claude://open?url=...` thay vì `reynard://open?url=...` (scheme cũ không còn app nào nhận), thông báo lỗi đổi thành "Unable to open Claude.". App chính đã xử lý sẵn `claude://open?url=` trong `SceneDelegate.resolvedBrowserURL`. |
+| Gọn file .tipa | `tools/release/create-ipa.sh`: nén zip với `-9 -D` (nén tối đa, không ghi các thư mục rỗng — bản cũ có 509 mục thư mục rỗng), giảm ~800 KB. Chỉ đổi vỏ zip, gói app đã ký bên trong không động vào nên chữ ký vẫn nguyên. |
 | Tắt quay lại | `canGoBack=false`, `backPreviewImage=nil`, tắt vuốt quay lại và `interactivePopGestureRecognizer`, `isToolbarEnabled=false` trong `BrowserViewController`. |
 | Đổi tên / Bundle ID | `APP_DISPLAY_NAME = Claude` (`Reynard.xcconfig`); `ai.claude.browser`, `.Helper`, `.OpenIn` trong `project.pbxproj`, `Info.plist`, entitlements, `create-ipa.sh`, `OpenInViewController.swift`; scheme `reynard://` → `claude://` (`SceneDelegate.swift`, `Info.plist`). |
 | Không tự cập nhật về Reynard | `BrowserUpdates.fetchUpdates()` tắt, file sideload đổi thành `Claude.ipa`. |
