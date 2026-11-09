@@ -151,7 +151,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.11
 
-      # ChatGPT: cache the WHOLE Gecko objdir, not just dist. Run #5 proved a
+      # Claude: cache the WHOLE Gecko objdir, not just dist. Run #5 proved a
       # dist-only cache is incomplete (missing generated header ErrorList.h),
       # so cache the full build tree instead — it is self-contained. Key covers
       # everything that affects the engine. First run on a new key is a cache
@@ -209,22 +209,22 @@ jobs:
         if: ${{ matrix.variant == 'standard' && inputs.build_normal_ipa }}
         uses: actions/upload-artifact@v4
         with:
-          name: ChatGPT.ipa
-          path: dist/ChatGPT.ipa
+          name: Claude.ipa
+          path: dist/Claude.ipa
           if-no-files-found: error
 
       - name: Upload TrollStore TIPA
         if: ${{ matrix.variant == 'standard' && inputs.build_trollstore_tipa }}
         uses: actions/upload-artifact@v4
         with:
-          name: ChatGPT-TrollStore.tipa
-          path: dist/ChatGPT-TrollStore.tipa
+          name: Claude-TrollStore.tipa
+          path: dist/Claude-TrollStore.tipa
           if-no-files-found: error
 
       - name: Upload Jailbroken IPA
         if: ${{ matrix.variant == 'nojemalloc' && inputs.build_jailbroken_ipa }}
         uses: actions/upload-artifact@v4
         with:
-          name: ChatGPT-Jailbroken.ipa
-          path: dist/ChatGPT-Jailbroken.ipa
+          name: Claude-Jailbroken.ipa
+          path: dist/Claude-Jailbroken.ipa
           if-no-files-found: error

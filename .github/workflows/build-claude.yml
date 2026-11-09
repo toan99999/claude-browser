@@ -1,0 +1,26 @@
+# Claude: build only the TrollStore .tipa (iOS 14 - 16.6.1, 17.0)
+# Run from Actions tab -> Build Claude (TrollStore) -> Run workflow
+# Result: artifact Claude-TrollStore.tipa, install with TrollStore on iOS 17.0
+name: Build Claude (TrollStore)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-claude.yml'
+      - '.github/workflows/build.yml'
+      - 'browser/**'
+      - 'tools/release/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      checkout_ref: ${{ github.sha }}
+      build_normal_ipa: false
+      build_trollstore_tipa: true
+      build_jailbroken_ipa: false
