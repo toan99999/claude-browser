@@ -554,7 +554,7 @@
 					"-lmozinference",
 					"-Wl,-hidden-lidevice_ffi",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "ai.chatgpt.browser";
+				PRODUCT_BUNDLE_IDENTIFIER = "ai.claude.browser";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -625,7 +625,7 @@
 					"-lmozinference",
 					"-Wl,-hidden-lidevice_ffi",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "ai.chatgpt.browser";
+				PRODUCT_BUNDLE_IDENTIFIER = "ai.claude.browser";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -918,7 +918,7 @@
 					"-lmozinference",
 					"-Wl,-u,_NSExtensionMain",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "ai.chatgpt.browser.Helper";
+				PRODUCT_BUNDLE_IDENTIFIER = "ai.claude.browser.Helper";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -966,7 +966,7 @@
 					"-lmozinference",
 					"-Wl,-u,_NSExtensionMain",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "ai.chatgpt.browser.Helper";
+				PRODUCT_BUNDLE_IDENTIFIER = "ai.claude.browser.Helper";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -993,7 +993,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = Extensions/OpenIn/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Open in ChatGPT";
+				INFOPLIST_KEY_CFBundleDisplayName = "Open in Claude";
 				IPHONEOS_DEPLOYMENT_TARGET = "$(IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1003,7 +1003,7 @@
 				LIBRARY_SEARCH_PATHS = "";
 				MARKETING_VERSION = "$(CURRENT_VERSION)";
 				OTHER_LDFLAGS = "";
-				PRODUCT_BUNDLE_IDENTIFIER = "ai.chatgpt.browser.OpenIn";
+				PRODUCT_BUNDLE_IDENTIFIER = "ai.claude.browser.OpenIn";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
@@ -1030,7 +1030,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = Extensions/OpenIn/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Open in ChatGPT";
+				INFOPLIST_KEY_CFBundleDisplayName = "Open in Claude";
 				IPHONEOS_DEPLOYMENT_TARGET = "$(IPHONEOS_DEPLOYMENT_TARGET)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1040,7 +1040,7 @@
 				LIBRARY_SEARCH_PATHS = "";
 				MARKETING_VERSION = "$(CURRENT_VERSION)";
 				OTHER_LDFLAGS = "";
-				PRODUCT_BUNDLE_IDENTIFIER = "ai.chatgpt.browser.OpenIn";
+				PRODUCT_BUNDLE_IDENTIFIER = "ai.claude.browser.OpenIn";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
