@@ -77,11 +77,11 @@ final class BrowserPreferences {
             key("BrowsingSettings", "readerViewFontType"): ReaderViewFontType.serif.rawValue,
             
             // New Tab
-            key("NewTabSettings", "newTabDisplayOption"): NewTabDisplayOption.customURL.rawValue, // ChatGPT: new tab opens ChatGPT
-            key("NewTabSettings", "customNewTabURL"): "https://chatgpt.com", // ChatGPT
+            key("NewTabSettings", "newTabDisplayOption"): NewTabDisplayOption.customURL.rawValue, // Claude: new tab opens Claude
+            key("NewTabSettings", "customNewTabURL"): "https://claude.ai", // Claude
             
             // Homepage
-            key("HomepageSettings", "openingScreen"): HomepageOpeningScreen.lastTab.rawValue, // ChatGPT: no homepage on launch, viewDidLoad opens ChatGPT
+            key("HomepageSettings", "openingScreen"): HomepageOpeningScreen.lastTab.rawValue, // Claude: no homepage on launch, viewDidLoad opens Claude
             key("HomepageSettings", "showsFavorites"): true,
             key("HomepageSettings", "showsFavoritesInPrivateBrowsing"): false,
             key("HomepageSettings", "favoriteRowCount"): 2,
@@ -611,7 +611,7 @@ final class BrowserPreferences {
     struct NewTabSettings {
         static var newTabDisplayOption: NewTabDisplayOption {
             get {
-                let rawValue = prefs.string(forSetting: "NewTabSettings", key: "newTabDisplayOption") ?? NewTabDisplayOption.customURL.rawValue // ChatGPT
+                let rawValue = prefs.string(forSetting: "NewTabSettings", key: "newTabDisplayOption") ?? NewTabDisplayOption.customURL.rawValue // Claude
                 return NewTabDisplayOption(rawValue: rawValue) ?? .homepage
             }
             set {
@@ -622,7 +622,7 @@ final class BrowserPreferences {
         
         static var customNewTabURL: String {
             get {
-                return prefs.string(forSetting: "NewTabSettings", key: "customNewTabURL") ?? "https://chatgpt.com" // ChatGPT
+                return prefs.string(forSetting: "NewTabSettings", key: "customNewTabURL") ?? "https://claude.ai" // Claude
             }
             set {
                 prefs.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forSetting: "NewTabSettings", key: "customNewTabURL")
