@@ -57,7 +57,7 @@ final class BrowserChrome: UIView, UIGestureRecognizerDelegate {
         let animatesChromeStateChanges: Bool
     }
     
-    // ChatGPT: 3-finger tap toggles the address bar. Off by default (the
+    // Claude: 3-finger tap toggles the address bar. Off by default (the
     // toolbar stays hidden, as before); when on, the toolbar is shown
     // using the normal resolved states. Toggled from BrowserViewController.
     var isAddressBarVisible = false
@@ -231,7 +231,7 @@ final class BrowserChrome: UIView, UIGestureRecognizerDelegate {
             dismissActionBar(animated: false)
         }
         
-        // ChatGPT: toolbar is hidden by default; a 3-finger tap toggles
+        // Claude: toolbar is hidden by default; a 3-finger tap toggles
         // isAddressBarVisible, and when it is on the toolbar is shown
         // using the normal resolved states (as in upstream Reynard).
         let topState: TopToolbar.LayoutState
