@@ -79,4 +79,9 @@ if [ "$BUILD_TYPE" = "--jailbroken" ]; then
 	unzip -p "Reynard-0.10.0.ipa" "Payload/Reynard.app/Frameworks/libswift_Concurrency.dylib" > "Payload/Reynard.app/Frameworks/libswift_Concurrency.dylib"
 fi
 
-zip -r "../$OUTPUT_NAME" Payload -x "._*" -x ".DS_Store" -x "__MACOSX"
+# Claude: zip without directory entries (-D) and at max compression (-9).
+# The plain `zip -r` packed 509 empty directory entries into the .tipa
+# and used default compression; this saves ~800 KB on a ~103 MB file.
+# Only the zip container changes — the signed app bundle inside is
+# untouched, so the code signature stays valid.
+zip -r -9 -D "../$OUTPUT_NAME" Payload -x "._*" -x ".DS_Store" -x "__MACOSX"
