@@ -45,13 +45,14 @@ struct PermissionPromptPresenter: PermissionPromptPresenting {
         }
     }
 
-    // ChatGPT: find a view controller that can actually present the
+    // Claude: find a view controller that can actually present the
     // permission alert. The old code returned "deny" immediately when
     // topViewController() was nil, so a mic/camera request arriving while
     // the app was still launching (or mid-transition, with no
     // foreground-active scene yet) was silently recorded as "blocked" and
-    // the user never saw a prompt — e.g. chatgpt.com ending up in the
-    // denied list at 09:17 on 2026-11-08 despite the default being "Ask".
+    // the user never saw a prompt — e.g. a site ending up in the
+    // denied list despite the default being "Ask" (this happened to
+    // chatgpt.com at 09:17 on 2026-11-08 in the ChatGPT build).
     // Wait briefly for the scene to become foreground-active, then fall
     // back to any window scene's root view controller. Only deny as a
     // last resort when no presenter attached to a window exists at all
