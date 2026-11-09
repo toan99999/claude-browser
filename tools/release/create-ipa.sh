@@ -13,16 +13,16 @@ WORK_DIR="$ROOT_DIR/dist/Reynard"
 BUILD_TYPE="${1:-normal}"
 case "$BUILD_TYPE" in
 	--trollstore)
-		OUTPUT_NAME="ChatGPT-TrollStore.tipa"
+		OUTPUT_NAME="Claude-TrollStore.tipa"
 		PTRACE_JIT_NAME="ts_ptrace_jit"
 		;;
 	--jailbroken)
-		OUTPUT_NAME="ChatGPT-Jailbroken.ipa"
+		OUTPUT_NAME="Claude-Jailbroken.ipa"
 		PTRACE_JIT_NAME="jb_ptrace_jit"
 		;;
 	*)
 		BUILD_TYPE="normal"
-		OUTPUT_NAME="ChatGPT.ipa"
+		OUTPUT_NAME="Claude.ipa"
 		;;
 esac
 
@@ -42,9 +42,9 @@ fi
 
 # I absolutely hate Apple for this
 # Why is my bundle identifier just become unavailable for no reason?
-plutil -replace CFBundleIdentifier -string "ai.chatgpt.browser" "$APP_PATH/Info.plist"
-plutil -replace CFBundleIdentifier -string "ai.chatgpt.browser.Helper" "$APP_PATH/PlugIns/Reynard Helper.appex/Info.plist"
-plutil -replace CFBundleIdentifier -string "ai.chatgpt.browser.OpenIn" "$APP_PATH/PlugIns/OpenIn.appex/Info.plist"
+plutil -replace CFBundleIdentifier -string "ai.claude.browser" "$APP_PATH/Info.plist"
+plutil -replace CFBundleIdentifier -string "ai.claude.browser.Helper" "$APP_PATH/PlugIns/Reynard Helper.appex/Info.plist"
+plutil -replace CFBundleIdentifier -string "ai.claude.browser.OpenIn" "$APP_PATH/PlugIns/OpenIn.appex/Info.plist"
 
 rm -rf "$WORK_DIR" "$ROOT_DIR/dist/$OUTPUT_NAME"
 mkdir -p "$WORK_DIR/Payload"
