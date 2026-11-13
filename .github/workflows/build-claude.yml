@@ -5,6 +5,9 @@ name: Build Claude (TrollStore)
 
 on:
   workflow_dispatch:
+  # Keep-warm: cache-hit build twice a week so GitHub does not delete the Gecko objdir/sccache caches after 7 days idle. Free (public repo).
+  schedule:
+    - cron: '0 3 * * 0,3'
   push:
     branches: [main]
     paths:
