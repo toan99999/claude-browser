@@ -1,6 +1,6 @@
 # Claude — Reynard fork mở thẳng Claude, ẩn toolbar
 
-Gốc: https://github.com/minh-ton/reynard-browser (Reynard 0.20.1, trình duyệt Gecko cho iOS 13+)
+Gốc: https://github.com/minh-ton/reynard-browser (Reynard 0.21.0 + main 3c0779b, Firefox 160, trình duyệt Gecko cho iOS 13+)
 Bản này: **Claude** — tên app `Claude`, Bundle ID `ai.claude.browser`, URL scheme `claude://`
 
 ## Đã đổi gì (19 file sửa + 1 workflow mới, giống bản Muse/ChatGPT — cộng thêm 3 lỗi sửa sau build #3)
