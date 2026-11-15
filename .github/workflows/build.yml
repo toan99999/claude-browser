@@ -85,6 +85,9 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_GHA_VERSION: ${{ matrix.sccache_namespace }}
+      # If the sccache backend blips mid-build, fall back to the local
+      # compiler instead of failing a multi-hour build.
+      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
 
     steps:
       - name: Check out repository
@@ -151,6 +154,22 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.11
 
+      # Warm up the sccache server with retries: a transient GitHub cache
+      # backend outage at startup otherwise aborts the whole multi-hour
+      # build. Mid-build blips are non-fatal cache misses, and
+      # SCCACHE_IGNORE_SERVER_IO_ERROR falls back to the local compiler.
+      - name: Warm up sccache
+        run: |
+          for i in 1 2 3; do
+            if sccache --show-stats >/dev/null 2>&1; then
+              echo "sccache server is up (attempt $i)"
+              exit 0
+            fi
+            echo "sccache not responding (attempt $i), retrying in 10s..."
+            sleep 10
+          done
+          echo "::warning::sccache server did not respond after 3 attempts; continuing with local-compiler fallback"
+
       # Claude: cache the WHOLE Gecko objdir, not just dist. Run #5 proved a
       # dist-only cache is incomplete (missing generated header ErrorList.h),
       # so cache the full build tree instead — it is self-contained. Key covers
@@ -159,6 +178,13 @@ jobs:
       # runs restore it and skip Build Gecko (~15-20min total). Restore/save
       # are continue-on-error so a cache problem (e.g. over the 10GB repo
       # limit) can never fail the build — sccache stays the fallback.
+      # Partial banking (2026-11-15): if Build Gecko is cut short by its
+      # 5.5h step timeout, the partial objdir is saved under a SEPARATE
+      # gecko-objdir-partial-* key and restored via restore-keys below. A
+      # partial restore reports cache-hit=false, so Build Gecko runs and
+      # ./mach build continues incrementally instead of restarting from
+      # zero. Never save a partial under the exact key: the next run would
+      # skip Build Gecko on an incomplete tree.
       - name: Restore Gecko objdir cache
         id: gecko_objdir
         continue-on-error: true
@@ -166,9 +192,13 @@ jobs:
         with:
           path: engine/firefox/obj-aarch64-apple-ios
           key: gecko-objdir-${{ matrix.variant }}-xcode-26.6-${{ steps.rust_toolchain.outputs.hash }}-${{ hashFiles('engine/release.txt', 'patches/**', 'tools/development/build-gecko.sh', 'tools/development/apply-patches.sh') }}
+          restore-keys: |
+            gecko-objdir-partial-${{ matrix.variant }}-xcode-26.6-${{ steps.rust_toolchain.outputs.hash }}-${{ hashFiles('engine/release.txt', 'patches/**', 'tools/development/build-gecko.sh', 'tools/development/apply-patches.sh') }}-
 
       - name: Build Gecko
+        id: gecko_build
         if: steps.gecko_objdir.outputs.cache-hit != 'true'
+        timeout-minutes: 330
         env:
           CC: clang
           CXX: clang++
@@ -183,6 +213,19 @@ jobs:
         with:
           path: engine/firefox/obj-aarch64-apple-ios
           key: gecko-objdir-${{ matrix.variant }}-xcode-26.6-${{ steps.rust_toolchain.outputs.hash }}-${{ hashFiles('engine/release.txt', 'patches/**', 'tools/development/build-gecko.sh', 'tools/development/apply-patches.sh') }}
+
+      # Bank progress when Build Gecko is cut short (step timeout or job
+      # cap): without this, a cancelled run saved NOTHING and the next retry
+      # restarted from zero. The run-number suffix keeps each partial save
+      # unique (cache entries are immutable); the next run restores the
+      # newest partial via restore-keys and continues incrementally.
+      - name: Save partial Gecko objdir cache
+        if: ${{ always() && (steps.gecko_build.outcome == 'failure' || steps.gecko_build.outcome == 'cancelled') }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: engine/firefox/obj-aarch64-apple-ios
+          key: gecko-objdir-partial-${{ matrix.variant }}-xcode-26.6-${{ steps.rust_toolchain.outputs.hash }}-${{ hashFiles('engine/release.txt', 'patches/**', 'tools/development/build-gecko.sh', 'tools/development/apply-patches.sh') }}-${{ github.run_number }}
 
       - name: Build idevice support library
         run: ./tools/development/build-idevice.sh
@@ -228,3 +271,7 @@ jobs:
           name: Claude-Jailbroken.ipa
           path: dist/Claude-Jailbroken.ipa
           if-no-files-found: error
+
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true

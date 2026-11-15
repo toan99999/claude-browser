@@ -5,9 +5,12 @@ name: Build Claude (TrollStore)
 
 on:
   workflow_dispatch:
-  # Keep-warm: cache-hit build twice a week so GitHub does not delete the Gecko objdir/sccache caches after 7 days idle. Free (public repo).
-  schedule:
-    - cron: '0 3 * * 0,3'
+  # Keep-warm PAUSED 2026-11-15 for the partial-objdir retry: a scheduled
+  # build firing during the retry would run a second full build in parallel
+  # (the #10/#11 disaster). Re-enable after the retry build succeeds
+  # (uncomment the schedule block below).
+  # schedule:
+  #   - cron: '0 3 * * 0,3'
   push:
     branches: [main]
     paths:
