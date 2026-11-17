@@ -5,8 +5,8 @@ name: Build Claude (TrollStore)
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 3 * * 0,3'
+  # schedule: PAUSED during retry (re-enable after the retry succeeds)
+  #   - cron: '0 3 * * 0,3'
   push:
     branches: [main]
     paths:
