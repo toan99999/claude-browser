@@ -194,6 +194,7 @@ jobs:
           key: gecko-objdir-${{ matrix.variant }}-xcode-26.6-${{ steps.rust_toolchain.outputs.hash }}-${{ hashFiles('engine/release.txt', 'patches/**', 'tools/development/build-gecko.sh', 'tools/development/apply-patches.sh') }}
           restore-keys: |
             gecko-objdir-partial-${{ matrix.variant }}-xcode-26.6-${{ steps.rust_toolchain.outputs.hash }}-${{ hashFiles('engine/release.txt', 'patches/**', 'tools/development/build-gecko.sh', 'tools/development/apply-patches.sh') }}-
+            gecko-objdir-${{ matrix.variant }}-xcode-26.6-${{ steps.rust_toolchain.outputs.hash }}-
 
       - name: Build Gecko
         id: gecko_build
