@@ -7,16 +7,13 @@
 
 import UIKit
 
-protocol TabOverviewDataSource: AnyObject {
-    var regularTabs: [Tab] { get }
-    var privateTabs: [Tab] { get }
-    var selectedMode: TabMode { get }
-    var selectedIndex: Int { get }
-    
+protocol TabOverviewDataSource: TabListSource {
     func selectTab(at index: Int, mode: TabMode)
     func closeTab(at index: Int, mode: TabMode)
     func moveTab(from sourceIndex: Int, to destinationIndex: Int, mode: TabMode)
-    func captureThumbnail(forTabAt index: Int, mode: TabMode, completion: ((UIImage?) -> Void)?)
+    func moveTab(withID tabID: UUID, to destinationIndex: Int)
+    @discardableResult
+    func captureThumbnail(forTabAt index: Int, mode: TabMode) -> UIImage?
 }
 
 protocol TabOverviewDelegate: AnyObject {
@@ -126,6 +123,7 @@ final class TabOverview: UIView {
     private var privateTabsCollectionBottomToToolbarConstraint: NSLayoutConstraint!
     
     private var appliesNextTabChangesWithoutAnimation = false
+    private var holdsTabChanges = false
     
     // MARK: - Lifecycle
     
@@ -222,6 +220,10 @@ final class TabOverview: UIView {
     }
     
     func applyPendingTabChanges() {
+        guard !holdsTabChanges else {
+            return
+        }
+        
         if appliesNextTabChangesWithoutAnimation {
             appliesNextTabChangesWithoutAnimation = false
             collection.reloadTabCards()
@@ -233,6 +235,15 @@ final class TabOverview: UIView {
     
     func prepareNextTabChangesWithoutAnimation() {
         appliesNextTabChangesWithoutAnimation = true
+    }
+    
+    func holdTabChanges() {
+        holdsTabChanges = true
+    }
+    
+    func releaseTabChanges() {
+        holdsTabChanges = false
+        reloadTabs()
     }
     
     func refreshTab(at index: Int, mode: TabMode) {
@@ -267,7 +278,7 @@ final class TabOverview: UIView {
     
     func prepareDismissSelectionForCurrentTab() {
         guard let dataSource else { return }
-        presentation.prepareDismissSelection(to: dataSource.selectedIndex, mode: dataSource.selectedMode, previewImage: nil)
+        presentation.prepareDismissSelection(to: dataSource.selectedTabIndex, mode: dataSource.selectedTabMode, previewImage: nil)
     }
     
     // MARK: - View Setup

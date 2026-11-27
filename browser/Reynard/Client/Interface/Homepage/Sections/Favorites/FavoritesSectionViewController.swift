@@ -7,10 +7,6 @@
 
 import UIKit
 
-protocol FavoritesSectionViewControllerDelegate: HomepageSectionDelegate {
-    func favoritesSectionViewController(_ controller: FavoritesSectionViewController, didSelectFolder folder: BookmarkFolderSnapshot)
-}
-
 final class FavoritesSectionViewController: UIViewController {
     private enum UX {
         static let horizontalInset: CGFloat = 2
@@ -28,7 +24,7 @@ final class FavoritesSectionViewController: UIViewController {
         case active(cell: UICollectionViewCell)
     }
     
-    weak var delegate: FavoritesSectionViewControllerDelegate?
+    weak var delegate: HomepageSectionDelegate?
     
     private static let titleFont = UIFontMetrics(forTextStyle: .title2).scaledFont(
         for: .systemFont(ofSize: UX.titleFontSize, weight: .bold)
@@ -426,7 +422,7 @@ final class FavoritesSectionViewController: UIViewController {
         let viewController = EditBookmarkViewController(bookmark: bookmark, store: bookmarkStore)
         let navigationController = UINavigationController(rootViewController: viewController)
         navigationController.modalPresentationStyle = .pageSheet
-        UIApplication.shared.topViewController()?.present(navigationController, animated: true)
+        UIApplication.shared.topViewController(in: view.window)?.present(navigationController, animated: true)
     }
     
     func deleteFavoriteBookmark(_ bookmark: BookmarkSnapshot) {
@@ -663,7 +659,7 @@ extension FavoritesSectionViewController: UICollectionViewDataSource, UICollecti
         case let .bookmark(bookmark):
             delegate?.homepageSection(self, didRequestOpenURL: bookmark.url, disposition: .currentTab)
         case let .folder(folder):
-            delegate?.favoritesSectionViewController(self, didSelectFolder: folder)
+            delegate?.homepageSection(self, didSelectFolder: folder)
         }
     }
     

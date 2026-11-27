@@ -7,32 +7,24 @@
 
 import UIKit
 
-protocol TabBarDataSource: AnyObject {
-    var tabs: [Tab] { get }
-    var selectedTabID: UUID? { get }
-    var selectedMode: TabMode { get }
-    
+protocol TabBarDataSource: TabListSource {
     func selectTab(at index: Int, mode: TabMode)
     func closeTab(at index: Int, mode: TabMode)
     func moveTab(from sourceIndex: Int, to destinationIndex: Int, mode: TabMode)
+    func moveTab(withID tabID: UUID, to destinationIndex: Int)
 }
 
 final class TabBar: UIView {
     private enum UX {
         static let tabBarHeight: CGFloat = 36
         static let tabBarBottomPadding: CGFloat = 2
+        static let reorderDropVerticalOutset: CGFloat = 100
     }
     
     enum Visibility: Equatable {
         case hidden
         case layoutReserved
         case visible
-    }
-    
-    enum ReorderState: Equatable {
-        case idle
-        case pending
-        case active
     }
     
     struct CellLayout {
@@ -43,7 +35,6 @@ final class TabBar: UIView {
     weak var dataSource: TabBarDataSource?
     
     private(set) var visibility: Visibility = .hidden
-    private(set) var reorderState: ReorderState = .idle
     private var pendingExpandedTabID: UUID?
     private var displayedTabIDs: [UUID]?
     
@@ -51,7 +42,7 @@ final class TabBar: UIView {
         guard let pendingExpandedTabID else {
             return nil
         }
-        return dataSource?.tabs.firstIndex { $0.id == pendingExpandedTabID }
+        return dataSource?.activeTabs.firstIndex { $0.id == pendingExpandedTabID }
     }
     
     var standardHeight: CGFloat {
@@ -78,6 +69,11 @@ final class TabBar: UIView {
     }
     
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let reorderDropBounds = bounds.insetBy(dx: 0, dy: -UX.reorderDropVerticalOutset)
+        if tabCollection.hasActiveDrag && reorderDropBounds.contains(point) {
+            return tabCollection
+        }
+        
         let hitView = super.hitTest(point, with: event)
         return hitView === self && tabCollection.transform.ty < 0 ? nil : hitView
     }
@@ -103,7 +99,7 @@ final class TabBar: UIView {
     }
     
     func cellLayout(at index: Int) -> CellLayout {
-        let tabs = dataSource?.tabs ?? []
+        let tabs = dataSource?.activeTabs ?? []
         let horizontalInset = tabCollection.adjustedContentInset.left + tabCollection.adjustedContentInset.right
         let containerWidth = tabCollection.bounds.width > 1 ? tabCollection.bounds.width : bounds.width
         let availableWidth = max(0, containerWidth - horizontalInset)
@@ -114,9 +110,9 @@ final class TabBar: UIView {
             return CellLayout(width: equalTabWidth, mode: .expanded)
         }
         
-        let usesExpandedLayout = isExpandedTab(at: index, in: tabs)
+        let usesExpandedLayout = isTabSelected(at: index)
         let expandedTabCount = max(1, tabs.indices.reduce(0) { count, tabIndex in
-            count + (isExpandedTab(at: tabIndex, in: tabs) ? 1 : 0)
+            count + (isTabSelected(at: tabIndex) ? 1 : 0)
         })
         let unselectedTabCount = max(0, layoutTabCount - expandedTabCount)
         
@@ -146,7 +142,7 @@ final class TabBar: UIView {
     
     func reloadTabs() {
         clearInvalidPendingExpansion()
-        let tabs = dataSource?.tabs ?? []
+        let tabs = dataSource?.activeTabs ?? []
         let (insertedIndices, deletedIndices) = changedTabIndices(in: tabs)
         if !insertedIndices.isEmpty && deletedIndices.isEmpty {
             tabCollection.updateTabs(inserting: insertedIndices)
@@ -162,15 +158,15 @@ final class TabBar: UIView {
         tabCollection.reloadTab(at: index)
     }
     
-    func setPendingExpansion(at index: Int?) {
-        pendingExpandedTabID = index.flatMap { dataSource?.tabs[safe: $0]?.id }
-        if index != nil {
+    func setPendingExpansion(to tab: Tab?) {
+        pendingExpandedTabID = tab?.id
+        if tab != nil {
             tabCollection.reloadTabs()
         }
     }
     
     func isTabSelected(at index: Int) -> Bool {
-        guard let tabs = dataSource?.tabs,
+        guard let tabs = dataSource?.activeTabs,
               tabs.indices.contains(index) else {
             return false
         }
@@ -179,14 +175,14 @@ final class TabBar: UIView {
     }
     
     func isTabSelected(id: UUID) -> Bool {
-        guard let tabs = dataSource?.tabs else {
+        guard let tabs = dataSource?.activeTabs else {
             return false
         }
         
         let selectedTabID = pendingExpandedTabID.flatMap { pendingTabID in
             tabs.first { $0.id == pendingTabID }?.id
         }
-        ?? dataSource?.selectedTabID
+        ?? dataSource?.selectedTab?.id
         return id == selectedTabID
     }
     
@@ -219,15 +215,11 @@ final class TabBar: UIView {
     
     // MARK: - Collection Coordination
     
-    func updateReorderState(_ state: ReorderState) {
-        reorderState = state
-    }
-    
     func requestSelectTab(at index: Int) {
         guard let dataSource else {
             return
         }
-        dataSource.selectTab(at: index, mode: dataSource.selectedMode)
+        dataSource.selectTab(at: index, mode: dataSource.selectedTabMode)
     }
     
     func requestCloseTab(at index: Int) {
@@ -235,15 +227,19 @@ final class TabBar: UIView {
         guard let dataSource else {
             return
         }
-        dataSource.closeTab(at: index, mode: dataSource.selectedMode)
+        dataSource.closeTab(at: index, mode: dataSource.selectedTabMode)
     }
     
     func requestMoveTab(from sourceIndex: Int, to destinationIndex: Int) {
         guard let dataSource else {
             return
         }
-        dataSource.moveTab(from: sourceIndex, to: destinationIndex, mode: dataSource.selectedMode)
-        displayedTabIDs = dataSource.tabs.map { $0.id }
+        dataSource.moveTab(from: sourceIndex, to: destinationIndex, mode: dataSource.selectedTabMode)
+        displayedTabIDs = dataSource.activeTabs.map { $0.id }
+    }
+    
+    func requestMoveTab(_ tab: Tab, to destinationIndex: Int) {
+        dataSource?.moveTab(withID: tab.id, to: destinationIndex)
     }
     
     // MARK: - View Setup
@@ -285,32 +281,6 @@ final class TabBar: UIView {
         if pendingExpandedTabIndex == nil {
             pendingExpandedTabID = nil
         }
-    }
-    
-    private func isExpandedTab(at index: Int, in tabs: [Tab]) -> Bool {
-        guard let tab = displayedTab(at: index, in: tabs) else {
-            return false
-        }
-        return isTabSelected(id: tab.id)
-    }
-    
-    private func displayedTab(at index: Int, in tabs: [Tab]) -> Tab? {
-        guard tabs.indices.contains(index) else {
-            return nil
-        }
-        
-        guard let sourceIndex = tabCollection.dragSourceIndex,
-              let targetIndex = tabCollection.dragDestinationIndex,
-              tabs.indices.contains(sourceIndex),
-              tabs.indices.contains(targetIndex),
-              sourceIndex != targetIndex else {
-            return tabs[index]
-        }
-        
-        var reorderedTabs = tabs
-        let movedTab = reorderedTabs.remove(at: sourceIndex)
-        reorderedTabs.insert(movedTab, at: targetIndex)
-        return reorderedTabs[index]
     }
     
     // MARK: - Presentation Coordination

@@ -7,20 +7,6 @@
 
 import UIKit
 
-protocol HomepageRootViewControllerDelegate: AnyObject {
-    func homepageRootViewController(_ controller: HomepageRootViewController, didRequestOpenURL url: URL, disposition: TabOpenDisposition)
-    func homepageRootViewController(
-        _ controller: HomepageRootViewController,
-        didRequestShareURL url: URL,
-        sourceView: UIView
-    )
-    func homepageRootViewController(_ controller: HomepageRootViewController, didRequestHideFromSuggestions siteID: Int64)
-    func homepageRootViewController(_ controller: HomepageRootViewController, didSelectRecentlyClosedTab id: UUID)
-    func homepageRootViewControllerDidSelectFolder(_ folder: BookmarkFolderSnapshot)
-    func homepageRootViewControllerDidSelectSettings(_ controller: HomepageRootViewController)
-    func homepageRootViewControllerDidStartScrolling()
-}
-
 protocol HomepageRecommendationViewController: UIViewController {
     func setContentMode(_ contentMode: HomepageContentMode)
     func setPrivateBrowsing(_ isPrivateBrowsing: Bool)
@@ -36,8 +22,7 @@ final class HomepageRootViewController: UIViewController {
         static let detachedMaximumWidth: CGFloat = 700
     }
     
-    weak var delegate: HomepageRootViewControllerDelegate?
-    
+    private weak var delegate: HomepageSectionDelegate?
     private let bookmarkStore: BookmarkStore
     private let folder: BookmarkFolderSnapshot?
     private let sections: [HomepageSection]
@@ -77,11 +62,13 @@ final class HomepageRootViewController: UIViewController {
     // MARK: - Lifecycle
     
     init(
+        delegate: HomepageSectionDelegate?,
         bookmarkStore: BookmarkStore,
         folder: BookmarkFolderSnapshot? = nil,
         sections: [HomepageSection] = HomepageSection.allCases,
         isPrivateBrowsing: Bool = false
     ) {
+        self.delegate = delegate
         self.bookmarkStore = bookmarkStore
         self.folder = folder
         self.sections = sections
@@ -256,21 +243,21 @@ final class HomepageRootViewController: UIViewController {
         switch section {
         case .recommendation(.performance):
             let viewController = PerformanceRecommendationViewController()
-            viewController.delegate = self
+            viewController.delegate = delegate
             viewController.setContentMode(contentMode)
             viewController.setPrivateBrowsing(isPrivateBrowsing)
             return viewController
             
         case .recommendation(.updateAvailable):
             let viewController = UpdateAvailableViewController()
-            viewController.delegate = self
+            viewController.delegate = delegate
             viewController.setContentMode(contentMode)
             viewController.setPrivateBrowsing(isPrivateBrowsing)
             return viewController
             
         case .recommendation(.donation):
             let viewController = DonationRecommendationViewController()
-            viewController.delegate = self
+            viewController.delegate = delegate
             viewController.setContentMode(contentMode)
             viewController.setPrivateBrowsing(isPrivateBrowsing)
             return viewController
@@ -287,19 +274,19 @@ final class HomepageRootViewController: UIViewController {
                 folder: folder,
                 showsSectionTitle: folder == nil
             )
-            viewController.delegate = self
+            viewController.delegate = delegate
             viewController.setContentMode(contentMode)
             return viewController
             
         case .frequentlyVisited:
             let viewController = FrequentlyVisitedSectionViewController()
-            viewController.delegate = self
+            viewController.delegate = delegate
             viewController.setContentMode(contentMode)
             return viewController
             
         case .recentlyClosedTabs:
             let viewController = RecentlyClosedTabsSectionViewController()
-            viewController.delegate = self
+            viewController.delegate = delegate
             viewController.setContentMode(contentMode)
             return viewController
         }
@@ -399,42 +386,6 @@ final class HomepageRootViewController: UIViewController {
 
 extension HomepageRootViewController: UIScrollViewDelegate {
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
-        delegate?.homepageRootViewControllerDidStartScrolling()
-    }
-}
-
-extension HomepageRootViewController: HomepageSectionDelegate {
-    func homepageSection(_ viewController: UIViewController, didRequestOpenURL url: URL, disposition: TabOpenDisposition) {
-        delegate?.homepageRootViewController(self, didRequestOpenURL: url, disposition: disposition)
-    }
-    
-    func homepageSection(
-        _ viewController: UIViewController,
-        didRequestShareURL url: URL,
-        sourceView: UIView
-    ) {
-        delegate?.homepageRootViewController(
-            self,
-            didRequestShareURL: url,
-            sourceView: sourceView
-        )
-    }
-    
-    func homepageSection(_ viewController: UIViewController, didRequestHideFromSuggestions siteID: Int64) {
-        delegate?.homepageRootViewController(self, didRequestHideFromSuggestions: siteID)
-    }
-    
-    func homepageSection(_ viewController: UIViewController, didSelectRecentlyClosedTab id: UUID) {
-        delegate?.homepageRootViewController(self, didSelectRecentlyClosedTab: id)
-    }
-    
-    func homepageSectionDidSelectSettings(_ viewController: UIViewController) {
-        delegate?.homepageRootViewControllerDidSelectSettings(self)
-    }
-}
-
-extension HomepageRootViewController: FavoritesSectionViewControllerDelegate {
-    func favoritesSectionViewController(_ controller: FavoritesSectionViewController, didSelectFolder folder: BookmarkFolderSnapshot) {
-        delegate?.homepageRootViewControllerDidSelectFolder(folder)
+        delegate?.homepageDidStartScrolling()
     }
 }

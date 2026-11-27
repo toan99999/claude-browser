@@ -50,6 +50,7 @@ extension BrowserViewController {
         if tabOverview.isPresented || tabOverview.isTransitionRunning {
             setTabOverviewVisible(false, animated: false)
         }
+        
         browserChrome.addressBar.focusForHardwareKeyboard()
     }
     
@@ -59,13 +60,13 @@ extension BrowserViewController {
             return
         }
         
-        guard tabManager.selectedTab != nil else {
+        guard let tab = tabManager.selectedTab else {
             return
         }
         
         toolbarController.reset()
         let mode = tabManager.selectedTabMode
-        tabManager.removeTab(at: tabManager.selectedTabIndex, mode: mode, behavior: .adjacent)
+        tabManager.removeTab(tab, behavior: .adjacent)
         
         if mode == .regular && tabManager.regularTabs.isEmpty {
             createNewTab(mode: .regular)
@@ -82,10 +83,10 @@ extension BrowserViewController {
         
         Task { @MainActor in
             do {
-                let pdfFileURL = try await PagePrintPreparationAlert.prepare {
+                let pdfFileURL = try await PagePrintPreparationAlert.prepare(in: view.window) {
                     try await tab.session.printToPDF()
                 }
-                try await PagePrintPresenter.present(pdfFileURL: pdfFileURL, jobName: tab.title)
+                try await PagePrintPresenter.present(pdfFileURL: pdfFileURL, jobName: tab.title, in: view.window)
             } catch {
                 return
             }
@@ -96,9 +97,11 @@ extension BrowserViewController {
         guard hasSelectedWebPage else {
             return
         }
+        
         if tabOverview.isPresented || tabOverview.isTransitionRunning {
             setTabOverviewVisible(false, animated: false)
         }
+        
         browserChrome.showActionBar(.findInPage(), animated: true)
     }
     
@@ -107,6 +110,7 @@ extension BrowserViewController {
               let session = tabManager.selectedTab?.session else {
             return
         }
+        
         if session.isOpen() {
             exitFullscreenIfNeeded()
             session.reload()
@@ -131,6 +135,7 @@ extension BrowserViewController {
         guard hasSelectedWebPage else {
             return
         }
+        
         browserChrome.onPageZoomIn?()
     }
     
@@ -138,6 +143,7 @@ extension BrowserViewController {
         guard hasSelectedWebPage else {
             return
         }
+        
         browserChrome.onPageZoomOut?()
     }
     
@@ -145,6 +151,7 @@ extension BrowserViewController {
         guard hasSelectedWebPage else {
             return
         }
+        
         setSelectedPageZoomLevel(PageZoomLevels.defaultLevel)
     }
     
@@ -152,6 +159,7 @@ extension BrowserViewController {
         guard tabManager.selectedTabMode == .regular else {
             return
         }
+        
         toggleLibrary(section: .history)
     }
     
@@ -159,6 +167,7 @@ extension BrowserViewController {
         guard tabManager.canGoBack else {
             return
         }
+        
         exitFullscreenIfNeeded()
         browserChrome.onBack?()
     }
@@ -167,6 +176,7 @@ extension BrowserViewController {
         guard tabManager.selectedTab?.state.navigationState.canGoForward == true else {
             return
         }
+        
         exitFullscreenIfNeeded()
         browserChrome.onForward?()
     }
@@ -179,6 +189,7 @@ extension BrowserViewController {
         guard hasSelectedWebPage else {
             return
         }
+        
         presentBookmarkEditor(addToFavorites: false)
     }
     
@@ -198,6 +209,7 @@ extension BrowserViewController {
         guard !tabOverview.isTransitionRunning else {
             return
         }
+        
         setTabOverviewVisible(!tabOverview.isPresented, animated: true)
     }
     
@@ -214,6 +226,7 @@ extension BrowserViewController {
         guard tabs.count > 1 else {
             return
         }
+        
         let index = (tabManager.selectedTabIndex + offset + tabs.count) % tabs.count
         selectTab(at: index, mode: tabManager.selectedTabMode)
     }
@@ -222,12 +235,14 @@ extension BrowserViewController {
         guard let number = (sender.propertyList as? NSNumber)?.intValue else {
             return
         }
+        
         let tabs = tabManager.activeTabs
         let index = number == 9 ? tabs.indices.last : tabs.indices.contains(number - 1) ? number - 1 : nil
         guard let index,
               index != tabManager.selectedTabIndex else {
             return
         }
+        
         selectTab(at: index, mode: tabManager.selectedTabMode)
     }
     
@@ -236,6 +251,7 @@ extension BrowserViewController {
               let closedTab = TabManagementStore.shared.recentlyClosedTabs(limit: 1).first else {
             return
         }
+        
         toolbarController.reset()
         dismissAddressBarEditingAndOverlays()
         _ = tabManager.restoreRecentlyClosedTab(id: closedTab.id)
@@ -246,26 +262,22 @@ extension BrowserViewController {
     }
     
     @objc func closeOtherTabsKeyCommand(_ sender: UIKeyCommand) {
-        let mode = tabManager.selectedTabMode
         let tabs = tabManager.activeTabs
         guard tabs.count > 1,
-              let selectedTabID = tabManager.selectedTab?.id else {
+              let selectedTab = tabManager.selectedTab else {
             return
         }
         
         toolbarController.reset()
         dismissAddressBarEditingAndOverlays()
-        tabs.indices.reversed().forEach { index in
-            if tabs[index].id != selectedTabID {
-                tabManager.removeTab(at: index, mode: mode, behavior: .none)
-            }
-        }
+        tabs.filter { $0 !== selectedTab }.reversed().forEach { tabManager.removeTab($0, behavior: .none) }
     }
     
     private var hasSelectedWebPage: Bool {
         guard let urlString = tabManager.selectedTab?.url else {
             return false
         }
+        
         return URL(string: urlString)?.host != nil
     }
 }

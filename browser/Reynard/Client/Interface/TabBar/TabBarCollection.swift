@@ -44,7 +44,7 @@ private final class TabBarCollectionLayout: UICollectionViewFlowLayout {
     override func layoutAttributesForElements(in rect: CGRect) -> [UICollectionViewLayoutAttributes]? {
         var attributes = super.layoutAttributesForElements(in: rect) ?? []
         guard let collectionView,
-              let dataSourceTabCount = tabBar?.dataSource?.tabs.count else {
+              let dataSourceTabCount = tabBar?.dataSource?.activeTabs.count else {
             return attributes
         }
         let tabCount = min(collectionView.numberOfItems(inSection: 0), dataSourceTabCount)
@@ -79,7 +79,7 @@ private final class TabBarCollectionLayout: UICollectionViewFlowLayout {
     private func showsSeparator(after index: Int) -> Bool {
         guard let collectionView,
               let tabBar,
-              let dataSourceTabCount = tabBar.dataSource?.tabs.count else {
+              let dataSourceTabCount = tabBar.dataSource?.activeTabs.count else {
             return false
         }
         let tabCount = min(collectionView.numberOfItems(inSection: 0), dataSourceTabCount)
@@ -124,19 +124,10 @@ private final class TabBarCollectionLayout: UICollectionViewFlowLayout {
     
 }
 
-final class TabBarCollection: UICollectionView, UIGestureRecognizerDelegate {
+final class TabBarCollection: UICollectionView {
     private enum UX {
-        static let tabReorderMinimumPressDuration: TimeInterval = 0.35
-        static let tabReorderStartDelay: TimeInterval = 0.06
-        static let tabReorderDirectionThreshold: CGFloat = 1
-        static let tabReorderTargetHysteresis: CGFloat = 8
-        static let dragSnapshotScale: CGFloat = 1.04
-        static let dragSnapshotAnimationDuration: TimeInterval = 0.15
-        static let dragSnapshotSnapDuration: TimeInterval = 0.24
-        static let dragSnapshotSnapDamping: CGFloat = 0.82
-        static let dragSnapshotBackgroundFadeDuration: TimeInterval = 0.12
-        static let dragSnapshotBackgroundOpacity: CGFloat = 0.5
-        static let selectedDragSnapshotBackgroundOpacity: CGFloat = 0.75
+        static let tabUpdateAnimationDuration: TimeInterval = 0.3
+        static let reorderEdgeInset: CGFloat = 128
     }
     
     private weak var tabBar: TabBar?
@@ -146,18 +137,7 @@ final class TabBarCollection: UICollectionView, UIGestureRecognizerDelegate {
     private var needsReload = false
     private var pendingInsertedIndices = Set<Int>()
     private var pendingDeletedIndices = Set<Int>()
-    
-    private weak var draggedCell: TabBarCell?
-    private var dragSnapshot: UIView?
-    private var dragSnapshotBackground: UIView?
-    private var reorderStartWorkItem: DispatchWorkItem?
-    private var dragTouchOffset: CGPoint = .zero
-    private var previousDragX: CGFloat?
-    private var didMoveTab = false
-    private var isEndingReorder = false
-    
-    private(set) var dragSourceIndex: Int?
-    private(set) var dragDestinationIndex: Int?
+    private var isSettlingDrop = false
     
     init() {
         let layout = TabBarCollectionLayout()
@@ -166,22 +146,10 @@ final class TabBarCollection: UICollectionView, UIGestureRecognizerDelegate {
         configureAppearance()
         configureLayout(layout)
         configureCollection()
-        configureGestures()
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-    
-    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        guard let longPressGesture = gestureRecognizer as? UILongPressGestureRecognizer,
-              let indexPath = indexPathForItem(at: longPressGesture.location(in: self)),
-              let tabBarCell = cellForItem(at: indexPath) as? TabBarCell else {
-            return super.gestureRecognizerShouldBegin(gestureRecognizer)
-        }
-        
-        let locationInCell = convert(longPressGesture.location(in: self), to: tabBarCell)
-        return !tabBarCell.containsCloseButton(at: locationInCell)
     }
     
     override func layoutSubviews() {
@@ -197,6 +165,24 @@ final class TabBarCollection: UICollectionView, UIGestureRecognizerDelegate {
         updateScrollability()
         refreshVisibleTabs()
         revealSelectedTab()
+    }
+    
+    @objc(_indexPathForItemAtPoint:)
+    private func indexPathForItemInTabRow(at point: CGPoint) -> IndexPath? {
+        let selector = #selector(indexPathForItemInTabRow(at:))
+        typealias IndexPathForItemAtPoint = @convention(c) (AnyObject, Selector, CGPoint) -> Unmanaged<NSIndexPath>?
+        let indexPathForItem = unsafeBitCast(UICollectionView.instanceMethod(for: selector), to: IndexPathForItemAtPoint.self)
+        var rowPoint = CGPoint(x: point.x, y: bounds.midY)
+        let visibleMaxX = min(bounds.maxX, contentSize.width)
+        let visibleWidth = visibleMaxX - bounds.minX
+        let dragWidth = visibleWidth - UX.reorderEdgeInset * 2
+        
+        if hasActiveDrag && dragWidth > 0 {
+            let stretchedX = bounds.minX + (point.x - bounds.minX - UX.reorderEdgeInset) * visibleWidth / dragWidth
+            rowPoint.x = min(max(stretchedX, bounds.minX + 1), visibleMaxX - 1)
+        }
+        
+        return indexPathForItem(self, selector, rowPoint)?.takeUnretainedValue() as IndexPath?
     }
     
     // MARK: - Configuration
@@ -232,7 +218,7 @@ final class TabBarCollection: UICollectionView, UIGestureRecognizerDelegate {
         let hasSingleChangeType = insertedIndices.isEmpty != deletedIndices.isEmpty
         guard let tabBar,
               hasSingleChangeType,
-              let tabCount = tabBar.dataSource?.tabs.count,
+              let tabCount = tabBar.dataSource?.activeTabs.count,
               currentCount + insertedIndices.count - deletedIndices.count == tabCount,
               insertedIndices.allSatisfy((0..<tabCount).contains),
               deletedIndices.allSatisfy((0..<currentCount).contains) else {
@@ -244,31 +230,29 @@ final class TabBarCollection: UICollectionView, UIGestureRecognizerDelegate {
         let deletedIndexPaths = deletedIndices.map { IndexPath(item: $0, section: 0) }
         let shouldRevealRightmostTab = insertedIndices.contains(tabCount - 1)
         layout.prepareForInsertion(at: insertedIndexPaths)
-        updateLayout()
         isUpdatingTabs = true
-        performBatchUpdates({
-            if !deletedIndexPaths.isEmpty {
-                deleteItems(at: deletedIndexPaths)
-            }
-            if !insertedIndexPaths.isEmpty {
-                insertItems(at: insertedIndexPaths)
-            }
-        }, completion: { [weak self] _ in
-            guard let self else {
-                return
-            }
-            
-            self.finishTabUpdate()
-        })
+        updateScrollability()
         
-        if shouldRevealRightmostTab {
-            updateScrollability()
-            layoutIfNeeded()
-            scrollToItem(
-                at: IndexPath(item: tabCount - 1, section: 0),
-                at: .right,
-                animated: true
-            )
+        UIView.animate(withDuration: UX.tabUpdateAnimationDuration) {
+            self.performBatchUpdates({
+                if !deletedIndexPaths.isEmpty {
+                    self.deleteItems(at: deletedIndexPaths)
+                }
+                if !insertedIndexPaths.isEmpty {
+                    self.insertItems(at: insertedIndexPaths)
+                }
+            }, completion: { [weak self] _ in
+                guard let self else {
+                    return
+                }
+                
+                self.finishTabUpdate()
+            })
+            
+            if shouldRevealRightmostTab {
+                let contentWidth = self.collectionViewLayout.collectionViewContentSize.width
+                self.contentOffset.x = max(0, contentWidth - self.bounds.width)
+            }
         }
     }
     
@@ -313,12 +297,12 @@ final class TabBarCollection: UICollectionView, UIGestureRecognizerDelegate {
     }
     
     private func updateScrollability() {
-        let tabCount = tabBar?.dataSource?.tabs.count ?? 0
+        let tabCount = tabBar?.dataSource?.activeTabs.count ?? 0
         let horizontalInsets = adjustedContentInset.left + adjustedContentInset.right
         let baseWidth = bounds.width > 1 ? bounds.width : tabBar?.bounds.width ?? 0
         let availableWidth = max(0, baseWidth - horizontalInsets)
-        let selectedIndex = tabBar?.dataSource?.selectedTabID.flatMap { selectedTabID in
-            tabBar?.dataSource?.tabs.firstIndex { $0.id == selectedTabID }
+        let selectedIndex = tabBar?.dataSource?.selectedTab.flatMap { selectedTab in
+            tabBar?.dataSource?.activeTabs.firstIndex { $0.id == selectedTab.id }
         }
         let pendingIndex = tabBar?.pendingExpandedTabIndex
         
@@ -361,7 +345,7 @@ final class TabBarCollection: UICollectionView, UIGestureRecognizerDelegate {
     private func revealSelectedTab() {
         guard isScrollEnabled,
               let tabBar,
-              let tabs = tabBar.dataSource?.tabs,
+              let tabs = tabBar.dataSource?.activeTabs,
               let selectedIndex = tabs.indices.first(where: tabBar.isTabSelected(at:)),
               selectedIndex < numberOfItems(inSection: 0),
               let attributes = layoutAttributesForItem(
@@ -375,7 +359,7 @@ final class TabBarCollection: UICollectionView, UIGestureRecognizerDelegate {
     
     private func configure(_ tabBarCell: TabBarCell, at indexPath: IndexPath) {
         guard let tabBar,
-              let tabs = tabBar.dataSource?.tabs,
+              let tabs = tabBar.dataSource?.activeTabs,
               tabs.indices.contains(indexPath.item) else {
             return
         }
@@ -410,6 +394,9 @@ final class TabBarCollection: UICollectionView, UIGestureRecognizerDelegate {
     private func configureCollection() {
         dataSource = self
         delegate = self
+        dragDelegate = self
+        dropDelegate = self
+        dragInteractionEnabled = true
         scrollsToTop = false
         register(TabBarCell.self, forCellWithReuseIdentifier: TabBarCell.reuseIdentifier)
         layout.register(
@@ -417,316 +404,11 @@ final class TabBarCollection: UICollectionView, UIGestureRecognizerDelegate {
             forDecorationViewOfKind: TabBarCollectionLayout.separatorKind
         )
     }
-    
-    private func configureGestures() {
-        let longPressGesture = UILongPressGestureRecognizer(target: self, action: #selector(handleReorderLongPress(_:)))
-        longPressGesture.minimumPressDuration = UX.tabReorderMinimumPressDuration
-        longPressGesture.delegate = self
-        addGestureRecognizer(longPressGesture)
-    }
-    
-    // MARK: - Reordering
-    
-    @objc private func handleReorderLongPress(_ gestureRecognizer: UILongPressGestureRecognizer) {
-        let location = gestureRecognizer.location(in: self)
-        switch gestureRecognizer.state {
-        case .began:
-            beginReordering(at: location)
-        case .changed:
-            updateReordering(at: location)
-        case .ended:
-            finishReordering(cancelled: false)
-        default:
-            finishReordering(cancelled: true)
-        }
-    }
-    
-    private func beginReordering(at location: CGPoint) {
-        guard let indexPath = indexPathForItem(at: location),
-              let tabBarCell = cellForItem(at: indexPath) as? TabBarCell,
-              !tabBarCell.containsCloseButton(at: convert(location, to: tabBarCell)) else {
-            return
-        }
-        
-        draggedCell = tabBarCell
-        dragSourceIndex = indexPath.item
-        dragDestinationIndex = indexPath.item
-        previousDragX = location.x
-        didMoveTab = false
-        cancelReorderStart()
-        beginDragSnapshot(for: tabBarCell, at: location)
-        tabBar?.updateReorderState(.pending)
-        
-        let workItem = DispatchWorkItem { [weak self, weak tabBarCell] in
-            guard let self,
-                  let tabBarCell,
-                  self.draggedCell === tabBarCell,
-                  self.tabBar?.reorderState == .pending else {
-                return
-            }
-            
-            guard self.beginInteractiveMovementForItem(at: indexPath) else {
-                self.isEndingReorder = true
-                self.endDragSnapshot { [weak self] in
-                    self?.resetReordering()
-                }
-                return
-            }
-            self.tabBar?.updateReorderState(.active)
-        }
-        reorderStartWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + UX.tabReorderStartDelay, execute: workItem)
-    }
-    
-    private func updateReordering(at location: CGPoint) {
-        guard tabBar?.reorderState == .active else {
-            return
-        }
-        
-        updateDragDestination(at: location, previousX: previousDragX)
-        previousDragX = location.x
-        updateInteractiveMovementTargetPosition(location)
-        updateDragSnapshotPosition(location)
-    }
-    
-    private func finishReordering(cancelled: Bool) {
-        guard !isEndingReorder else {
-            return
-        }
-        
-        cancelReorderStart()
-        let destinationIndex = dragDestinationIndex
-        if tabBar?.reorderState == .active {
-            if cancelled {
-                cancelInteractiveMovement()
-            } else {
-                endInteractiveMovement()
-            }
-        }
-        
-        guard !cancelled,
-              didMoveTab,
-              let destinationIndex else {
-            isEndingReorder = true
-            completeReordering()
-            return
-        }
-        
-        isEndingReorder = true
-        animateDragSnapshot(to: destinationIndex) { [weak self] in
-            self?.completeReordering()
-        }
-    }
-    
-    private func cancelReorderStart() {
-        reorderStartWorkItem?.cancel()
-        reorderStartWorkItem = nil
-    }
-    
-    private func updateDragDestination(at location: CGPoint, previousX: CGFloat?) {
-        guard let previousX,
-              let currentDestinationIndex = dragDestinationIndex,
-              let tabCount = tabBar?.dataSource?.tabs.count else {
-            return
-        }
-        
-        let horizontalDelta = location.x - previousX
-        let candidateIndex: Int
-        let crossedCandidateCenter: Bool
-        
-        if horizontalDelta >= UX.tabReorderDirectionThreshold {
-            candidateIndex = currentDestinationIndex + 1
-            guard candidateIndex < tabCount,
-                  let candidateAttributes = layoutAttributesForItem(at: IndexPath(item: candidateIndex, section: 0)) else {
-                return
-            }
-            crossedCandidateCenter = location.x >= candidateAttributes.center.x + UX.tabReorderTargetHysteresis
-        } else if horizontalDelta <= -UX.tabReorderDirectionThreshold {
-            candidateIndex = currentDestinationIndex - 1
-            guard candidateIndex >= 0,
-                  let candidateAttributes = layoutAttributesForItem(at: IndexPath(item: candidateIndex, section: 0)) else {
-                return
-            }
-            crossedCandidateCenter = location.x <= candidateAttributes.center.x - UX.tabReorderTargetHysteresis
-        } else {
-            return
-        }
-        
-        guard crossedCandidateCenter else {
-            return
-        }
-        
-        dragDestinationIndex = candidateIndex
-        collectionViewLayout.invalidateLayout()
-    }
-    
-    private func completeReordering() {
-        if didMoveTab {
-            reloadData()
-        }
-        collectionViewLayout.invalidateLayout()
-        layoutIfNeeded()
-        revealSelectedTab()
-        endDragSnapshot { [weak self] in
-            self?.resetReordering()
-        }
-    }
-    
-    private func resetReordering() {
-        clearReorderState()
-        previousDragX = nil
-        didMoveTab = false
-        isEndingReorder = false
-    }
-    
-    private func clearReorderState() {
-        dragSourceIndex = nil
-        dragDestinationIndex = nil
-        tabBar?.updateReorderState(.idle)
-    }
-    
-    // MARK: - Drag Snapshot
-    
-    private func beginDragSnapshot(for tabBarCell: TabBarCell, at location: CGPoint) {
-        guard let dragContainer = tabBar?.superview,
-              let dragSnapshot = tabBarCell.snapshotView(afterScreenUpdates: true) else {
-            return
-        }
-        
-        dragSnapshot.frame = tabBarCell.convert(tabBarCell.bounds, to: dragContainer)
-        dragSnapshot.isUserInteractionEnabled = false
-        var backgroundView: UIView?
-        var backgroundOpacity = UX.dragSnapshotBackgroundOpacity
-        if let tabID = tabBarCell.tabID,
-           let isSelected = tabBar?.isTabSelected(id: tabID) {
-            let background = UIView(frame: dragSnapshot.frame.inset(by: TabBarCell.contentInsets))
-            background.backgroundColor = .systemGray6
-            background.layer.cornerRadius = TabBarCell.contentCornerRadius
-            background.layer.cornerCurve = .continuous
-            background.clipsToBounds = true
-            background.isUserInteractionEnabled = false
-            background.alpha = 0
-            backgroundOpacity = isSelected
-            ? UX.selectedDragSnapshotBackgroundOpacity
-            : UX.dragSnapshotBackgroundOpacity
-            dragContainer.addSubview(background)
-            backgroundView = background
-            dragSnapshotBackground = background
-        }
-        dragContainer.addSubview(dragSnapshot)
-        UIView.animate(
-            withDuration: UX.dragSnapshotAnimationDuration,
-            delay: 0,
-            options: [.curveEaseOut, .beginFromCurrentState]
-        ) {
-            dragSnapshot.transform = CGAffineTransform(scaleX: UX.dragSnapshotScale, y: UX.dragSnapshotScale)
-            backgroundView?.alpha = backgroundOpacity
-            backgroundView?.transform = CGAffineTransform(scaleX: UX.dragSnapshotScale, y: UX.dragSnapshotScale)
-        }
-        
-        tabBarCell.isHidden = true
-        self.dragSnapshot = dragSnapshot
-        let touchInDragContainer = convert(location, to: dragContainer)
-        dragTouchOffset = CGPoint(
-            x: touchInDragContainer.x - dragSnapshot.center.x,
-            y: touchInDragContainer.y - dragSnapshot.center.y
-        )
-    }
-    
-    private func updateDragSnapshotPosition(_ location: CGPoint) {
-        guard let dragContainer = tabBar?.superview,
-              let dragSnapshot else {
-            return
-        }
-        
-        let touchInDragContainer = convert(location, to: dragContainer)
-        dragSnapshot.center = CGPoint(
-            x: touchInDragContainer.x - dragTouchOffset.x,
-            y: touchInDragContainer.y - dragTouchOffset.y
-        )
-        dragSnapshotBackground?.center = dragSnapshot.center
-    }
-    
-    private func animateDragSnapshot(to destinationIndex: Int, completion: @escaping () -> Void) {
-        guard let dragContainer = tabBar?.superview,
-              let dragSnapshot,
-              let attributes = layoutAttributesForItem(
-                at: IndexPath(item: destinationIndex, section: 0)
-              ) else {
-            completion()
-            return
-        }
-        
-        let targetFrame = convert(attributes.frame, to: dragContainer)
-        let targetBackgroundFrame = targetFrame.inset(by: TabBarCell.contentInsets)
-        let backgroundView = dragSnapshotBackground
-        UIView.animate(
-            withDuration: UX.dragSnapshotSnapDuration,
-            delay: 0,
-            usingSpringWithDamping: UX.dragSnapshotSnapDamping,
-            initialSpringVelocity: 0,
-            options: [.beginFromCurrentState, .curveEaseOut],
-            animations: {
-                dragSnapshot.center = CGPoint(x: targetFrame.midX, y: targetFrame.midY)
-                dragSnapshot.bounds.size = targetFrame.size
-                dragSnapshot.transform = .identity
-                backgroundView?.center = CGPoint(
-                    x: targetBackgroundFrame.midX,
-                    y: targetBackgroundFrame.midY
-                )
-                backgroundView?.bounds.size = targetBackgroundFrame.size
-                backgroundView?.transform = .identity
-                backgroundView?.alpha = 0
-            },
-            completion: { _ in
-                completion()
-            }
-        )
-    }
-    
-    private func endDragSnapshot(completion: @escaping () -> Void) {
-        let finish = { [weak self] in
-            self?.removeDragSnapshot()
-            completion()
-        }
-        
-        guard let background = dragSnapshotBackground,
-              background.alpha > 0 else {
-            finish()
-            return
-        }
-        
-        UIView.animate(
-            withDuration: UX.dragSnapshotBackgroundFadeDuration,
-            delay: 0,
-            options: [.beginFromCurrentState, .curveEaseOut],
-            animations: {
-                background.alpha = 0
-            },
-            completion: { _ in
-                finish()
-            }
-        )
-    }
-    
-    private func removeDragSnapshot() {
-        dragSnapshotBackground?.removeFromSuperview()
-        dragSnapshotBackground = nil
-        dragSnapshot?.removeFromSuperview()
-        dragSnapshot = nil
-        draggedCell?.isHidden = false
-        draggedCell = nil
-        dragTouchOffset = .zero
-    }
 }
 
 extension TabBarCollection: UICollectionViewDataSource {
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        tabBar?.dataSource?.tabs.count ?? 0
-    }
-    
-    func collectionView(_ collectionView: UICollectionView, canMoveItemAt indexPath: IndexPath) -> Bool {
-        true
+        tabBar?.dataSource?.activeTabs.count ?? 0
     }
     
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
@@ -736,7 +418,7 @@ extension TabBarCollection: UICollectionViewDataSource {
         ) as! TabBarCell
         
         guard let tabBar,
-              let tabs = tabBar.dataSource?.tabs,
+              let tabs = tabBar.dataSource?.activeTabs,
               tabs.indices.contains(indexPath.item) else {
             return tabBarCell
         }
@@ -758,28 +440,6 @@ extension TabBarCollection: UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         tabBar?.requestSelectTab(at: indexPath.item)
     }
-    
-    func collectionView(
-        _ collectionView: UICollectionView,
-        targetIndexPathForMoveFromItemAt originalIndexPath: IndexPath,
-        toProposedIndexPath _: IndexPath
-    ) -> IndexPath {
-        guard let dragDestinationIndex else {
-            return originalIndexPath
-        }
-        
-        return IndexPath(item: dragDestinationIndex, section: originalIndexPath.section)
-    }
-    
-    func collectionView(
-        _ collectionView: UICollectionView,
-        moveItemAt sourceIndexPath: IndexPath,
-        to destinationIndexPath: IndexPath
-    ) {
-        tabBar?.requestMoveTab(from: sourceIndexPath.item, to: destinationIndexPath.item)
-        didMoveTab = true
-        clearReorderState()
-    }
 }
 
 extension TabBarCollection: UICollectionViewDelegateFlowLayout {
@@ -794,5 +454,101 @@ extension TabBarCollection: UICollectionViewDelegateFlowLayout {
         
         let cellLayout = tabBar.cellLayout(at: indexPath.item)
         return CGSize(width: cellLayout.width, height: bounds.height)
+    }
+}
+
+extension TabBarCollection: UICollectionViewDragDelegate {
+    func collectionView(
+        _ collectionView: UICollectionView,
+        itemsForBeginning session: UIDragSession,
+        at indexPath: IndexPath
+    ) -> [UIDragItem] {
+        guard let tabBarCell = cellForItem(at: indexPath) as? TabBarCell,
+              !tabBarCell.containsCloseButton(at: session.location(in: tabBarCell)),
+              let tab = tabBar?.dataSource?.activeTabs[safe: indexPath.item] else {
+            return []
+        }
+        
+        clipsToBounds = false
+        tabBar?.clipsToBounds = false
+        return [UIDragItem(tab: tab)]
+    }
+    
+    func collectionView(
+        _ collectionView: UICollectionView,
+        dragPreviewParametersForItemAt indexPath: IndexPath
+    ) -> UIDragPreviewParameters? {
+        guard let tabBarCell = cellForItem(at: indexPath) else {
+            return nil
+        }
+        
+        let parameters = UIDragPreviewParameters()
+        parameters.visiblePath = UIBezierPath(
+            roundedRect: tabBarCell.bounds.inset(by: TabBarCell.contentInsets),
+            cornerRadius: TabBarCell.contentCornerRadius
+        )
+        return parameters
+    }
+    
+    func collectionView(_ collectionView: UICollectionView, dragSessionDidEnd session: UIDragSession) {
+        if !isSettlingDrop {
+            clipsToBounds = true
+            tabBar?.clipsToBounds = true
+        }
+        updateLayout()
+        refreshVisibleTabs()
+    }
+}
+
+extension TabBarCollection: UICollectionViewDropDelegate {
+    func collectionView(
+        _ collectionView: UICollectionView,
+        dropSessionDidUpdate session: UIDropSession,
+        withDestinationIndexPath destinationIndexPath: IndexPath?
+    ) -> UICollectionViewDropProposal {
+        guard let tab = session.localDragSession?.items.first?.draggedTab,
+              tab.mode == tabBar?.dataSource?.selectedTabMode else {
+            return UICollectionViewDropProposal(operation: .forbidden)
+        }
+        
+        return UICollectionViewDropProposal(operation: .move, intent: .insertAtDestinationIndexPath)
+    }
+    
+    func collectionView(_ collectionView: UICollectionView, performDropWith coordinator: UICollectionViewDropCoordinator) {
+        guard let item = coordinator.items.first,
+              let tab = item.dragItem.draggedTab,
+              let tabCount = tabBar?.dataSource?.activeTabs.count else {
+            return
+        }
+        
+        guard let sourceIndexPath = item.sourceIndexPath else {
+            tabBar?.requestMoveTab(tab, to: coordinator.destinationIndexPath?.item ?? tabCount)
+            return
+        }
+        
+        let destinationItem = min(coordinator.destinationIndexPath?.item ?? tabCount, tabCount - 1)
+        let destinationIndexPath = IndexPath(item: destinationItem, section: 0)
+        performBatchUpdates {
+            tabBar?.requestMoveTab(from: sourceIndexPath.item, to: destinationItem)
+            moveItem(at: sourceIndexPath, to: destinationIndexPath)
+        }
+        
+        isSettlingDrop = true
+        coordinator.drop(item.dragItem, toItemAt: destinationIndexPath).addCompletion { [weak self] _ in
+            self?.isSettlingDrop = false
+            self?.clipsToBounds = true
+            self?.tabBar?.clipsToBounds = true
+        }
+    }
+    
+    func collectionView(
+        _ collectionView: UICollectionView,
+        dropPreviewParametersForItemAt indexPath: IndexPath
+    ) -> UIDragPreviewParameters? {
+        let parameters = self.collectionView(collectionView, dragPreviewParametersForItemAt: indexPath)
+        if #available(iOS 14.0, *) {
+            parameters?.shadowPath = UIBezierPath()
+        }
+        return parameters
     }
 }

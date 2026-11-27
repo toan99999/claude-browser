@@ -53,7 +53,7 @@ final class BrowserChrome: UIView, UIGestureRecognizerDelegate {
         let topInset: CGFloat
         let interfaceIdiom: UIUserInterfaceIdiom
         let orientation: BrowserLayout.ViewportOrientation
-        let isTwoThirdSplitScreenOrSmaller: Bool
+        let isSidebarOverlayLayout: Bool
         let sidebarButtonVisible: Bool
         let animatesChromeStateChanges: Bool
     }
@@ -68,9 +68,17 @@ final class BrowserChrome: UIView, UIGestureRecognizerDelegate {
     var onForward: (() -> Void)?
     var onShare: (() -> Void)?
     var onLibrary: (() -> Void)?
+    var onHistory: (() -> Void)?
+    var onBookmarks: (() -> Void)?
+    var onAddBookmark: (() -> Void)?
     var onDownloads: (() -> Void)?
+    var onSettings: (() -> Void)?
     var onNewTab: (() -> Void)?
     var onTabOverview: (() -> Void)?
+    var onShowReader: (() -> Void)?
+    var onShowFindInPage: (() -> Void)?
+    var onShowPageZoom: (() -> Void)?
+    var onHideToolbar: (() -> Void)?
     var onOverlayDismiss: (() -> Void)?
     var onPageZoomOut: (() -> Void)?
     var onPageZoomIn: (() -> Void)?
@@ -203,10 +211,6 @@ final class BrowserChrome: UIView, UIGestureRecognizerDelegate {
         return state.mode == .phone
         ? bottomToolbar.sharePopoverSourceView()
         : topToolbar.sharePopoverSourceView()
-    }
-    
-    var addressBarButton: AddressBarButton {
-        return addressBar.addressBarButton
     }
     
     // MARK: - Layout
@@ -469,7 +473,7 @@ final class BrowserChrome: UIView, UIGestureRecognizerDelegate {
         switch (state.interfaceIdiom, state.orientation) {
         case (.pad, .portrait):
             return .padPortrait
-        case (.pad, .landscape) where state.isTwoThirdSplitScreenOrSmaller:
+        case (.pad, .landscape) where state.isSidebarOverlayLayout:
             return .padConstrained
         case (.pad, .landscape):
             return .padLandscape
@@ -497,18 +501,6 @@ final class BrowserChrome: UIView, UIGestureRecognizerDelegate {
     
     // MARK: - Address Bar
     
-    func configureAddressBar(
-        delegate: AddressBarDelegate,
-        searchDelegate: AddressBarSearchDelegate,
-        gestureDelegate: AddressBarGestureDelegate
-    ) {
-        addressBar.configure(
-            delegate: delegate,
-            searchDelegate: searchDelegate,
-            gestureDelegate: gestureDelegate
-        )
-    }
-    
     func setAddressBarText(
         _ text: String?,
         locationText: String?,
@@ -526,38 +518,6 @@ final class BrowserChrome: UIView, UIGestureRecognizerDelegate {
         _ = updateToolbarTextTransition(textCenterProgress: toolbarTextCenterProgress)
     }
     
-    func updateAddressBarMenu(url: String?, usesDesktopWebsite: Bool?, readerMode: ReaderModeState) {
-        addressBar.updateMenu(url: url, usesDesktopWebsite: usesDesktopWebsite, readerMode: readerMode)
-    }
-    
-    func updateAddressBarAudioButton(isVisible: Bool, isMuted: Bool) {
-        addressBar.updateAudioButton(isVisible: isVisible, isMuted: isMuted)
-    }
-    
-    func setAddressBarLoadingProgress(_ progress: Float, isLoading: Bool) {
-        addressBar.setLoadingProgress(progress, isLoading: isLoading)
-    }
-    
-    func setAddressBarEditingState(_ state: AddressBar.EditingState) {
-        addressBar.setEditingState(state)
-    }
-    
-    func setPreservesAddressBarAutocompleteAfterResign(_ preserves: Bool) {
-        addressBar.setPreservesAutocompleteAfterResign(preserves)
-    }
-    
-    func clearAddressBarAutocomplete() {
-        addressBar.clearAutocomplete()
-    }
-    
-    func recordAddressBarEdit(previousText: String, currentText: String, isDelete: Bool) {
-        addressBar.recordEditForAutocomplete(previousText: previousText, currentText: currentText, isDelete: isDelete)
-    }
-    
-    func applyAddressBarAutocomplete(query: String, result: UserDataSearchResult?, topDomain: String?) {
-        addressBar.applySearchAutocomplete(query: query, result: result, topDomain: topDomain)
-    }
-    
     func resetAddressBarEditing() {
         _ = addressBar.resignFirstResponder()
         addressBar.clearAutocomplete()
@@ -565,30 +525,24 @@ final class BrowserChrome: UIView, UIGestureRecognizerDelegate {
         addressBar.setEditingState(.inactive)
     }
     
-    func resetHorizontalTransition() { addressBar.resetHorizontalTransition() }
-    
-    func performAfterTransition(_ completion: @escaping () -> Void) -> Bool {
-        addressBar.performAfterTransition(completion)
-    }
-    
-    func resignAddressBarFirstResponder() { _ = addressBar.resignFirstResponder() }
-    
-    func performAfterAddressBarMenuDismissal(_ action: @escaping () -> Void) {
-        addressBar.performAfterMenuDismissal(action)
-    }
-    
-    func animateAutomaticTabTransition(to tab: Tab, returning: Bool = false, completion: @escaping () -> Void) {
-        addressBar.animateAutomaticTabTransition(to: tab, returning: returning, completion: completion)
-    }
-    
-    var isAddressBarEditing: Bool { return addressBar.isEditingText }
-    var isShowingAddressBarAutocomplete: Bool { return addressBar.isShowingAutocomplete }
-    
     // MARK: - Toolbar Updates
     
     func updateNavigation(canGoBack: Bool, canGoForward: Bool, canShare: Bool) {
         topToolbar.updateNavigation(canGoBack: canGoBack, canGoForward: canGoForward, canShare: canShare)
         bottomToolbar.updateNavigation(canGoBack: canGoBack, canGoForward: canGoForward, canShare: canShare)
+    }
+    
+    func updatePageActions(canUsePageTools: Bool, canShowReader: Bool, isBookmarked: Bool) {
+        topToolbar.updatePageActions(
+            canUsePageTools: canUsePageTools,
+            canShowReader: canShowReader,
+            isBookmarked: isBookmarked
+        )
+        bottomToolbar.updatePageActions(
+            canUsePageTools: canUsePageTools,
+            canShowReader: canShowReader,
+            isBookmarked: isBookmarked
+        )
     }
     
     func configureNavigationMenus(
@@ -605,6 +559,11 @@ final class BrowserChrome: UIView, UIGestureRecognizerDelegate {
         onSelect: @escaping (UUID) -> Void
     ) {
         topToolbar.configureRecentlyClosedTabsMenu(
+            isAvailable: isAvailable,
+            itemsProvider: itemsProvider,
+            onSelect: onSelect
+        )
+        bottomToolbar.configureRecentlyClosedTabsMenu(
             isAvailable: isAvailable,
             itemsProvider: itemsProvider,
             onSelect: onSelect
@@ -667,20 +626,8 @@ final class BrowserChrome: UIView, UIGestureRecognizerDelegate {
         }
         
         topToolbar.onSidebar = { [weak self] in self?.onSidebar?() }
-        topToolbar.onBack = { [weak self] in self?.onBack?() }
-        topToolbar.onForward = { [weak self] in self?.onForward?() }
-        topToolbar.onShare = { [weak self] in self?.onShare?() }
-        topToolbar.onLibrary = { [weak self] in self?.onLibrary?() }
-        topToolbar.onDownloads = { [weak self] in self?.onDownloads?() }
-        topToolbar.onNewTab = { [weak self] in self?.onNewTab?() }
-        topToolbar.onTabOverview = { [weak self] in self?.onTabOverview?() }
-        
-        bottomToolbar.onBack = { [weak self] in self?.onBack?() }
-        bottomToolbar.onForward = { [weak self] in self?.onForward?() }
-        bottomToolbar.onShare = { [weak self] in self?.onShare?() }
-        bottomToolbar.onLibrary = { [weak self] in self?.onLibrary?() }
-        bottomToolbar.onDownloads = { [weak self] in self?.onDownloads?() }
-        bottomToolbar.onTabOverview = { [weak self] in self?.onTabOverview?() }
+        topToolbar.onItem = { [weak self] item in self?.performToolbarItem(item) }
+        bottomToolbar.onItem = { [weak self] item in self?.performToolbarItem(item) }
         
         actionBar.onPageZoomOut = { [weak self] in self?.onPageZoomOut?() }
         actionBar.onPageZoomIn = { [weak self] in self?.onPageZoomIn?() }
@@ -695,6 +642,26 @@ final class BrowserChrome: UIView, UIGestureRecognizerDelegate {
     
     @objc private func expandToolbar() {
         onToolbarExpansionRequested?()
+    }
+    
+    private func performToolbarItem(_ item: ToolbarItem) {
+        switch item {
+        case .back: onBack?()
+        case .forward: onForward?()
+        case .share: onShare?()
+        case .library: onLibrary?()
+        case .tabOverview: onTabOverview?()
+        case .newTab: onNewTab?()
+        case .history: onHistory?()
+        case .bookmarks: onBookmarks?()
+        case .addBookmark: onAddBookmark?()
+        case .downloads: onDownloads?()
+        case .settings: onSettings?()
+        case .reader: onShowReader?()
+        case .findInPage: onShowFindInPage?()
+        case .pageZoom: onShowPageZoom?()
+        case .hideToolbar: onHideToolbar?()
+        }
     }
     
     // MARK: - Transitions

@@ -9,28 +9,8 @@ import GeckoView
 import UIKit
 
 extension BrowserViewController: ContextMenuCoordinatorHost {
-    var contextMenuSourceView: ContentView {
-        return contentView
-    }
-    
-    var contextMenuTabActions: ContextMenuTabActions {
-        return ContextMenuTabActions(tabManager: tabManager, sessionManager: sessionManager)
-    }
-    
-    var contextMenuSelectedTabIsPrivate: Bool {
-        return tabManager.selectedTab?.isPrivate ?? false
-    }
-    
-    var contextMenuSelectedSession: GeckoSession? {
-        return tabManager.selectedTab?.session
-    }
-    
-    func captureSourceTabThumbnail(completion: @escaping () -> Void) {
-        let selectedIndex = tabManager.selectedTabIndex
-        let selectedMode = tabManager.selectedTabMode
-        captureThumbnail(forTabAt: selectedIndex, mode: selectedMode) { _ in
-            completion()
-        }
+    func captureSourceTabThumbnail() {
+        captureThumbnail(for: tabManager.selectedTab)
     }
     
     func contextMenuOpenLink(_ url: URL, disposition: TabOpenDisposition) {
@@ -50,27 +30,17 @@ extension BrowserViewController: ContextMenuCoordinatorHost {
         }
         
         let openerTabID = mode == .regular ? tabManager.selectedTab?.id : nil
-        let tabIndex = tabManager.createTab(selecting: disposition != .backgroundTab, target: target, mode: mode)
-        let tabs = mode == .private ? tabManager.privateTabs : tabManager.regularTabs
-        guard let tab = tabs[safe: tabIndex] else {
-            return
-        }
-        
+        let tab = tabManager.createTab(selecting: disposition != .backgroundTab, target: target, mode: mode)
         tab.state.openerTabID = openerTabID
         tabManager.browse(to: url.absoluteString, in: tab)
         guard disposition != .backgroundTab else {
             return
         }
         
-        captureThumbnail(forTabAt: tabManager.selectedTabIndex, mode: tabManager.selectedTabMode) { [weak self] _ in
-            guard let self else {
-                return
-            }
-            
-            self.tabBar.setPendingExpansion(at: tabIndex)
-            self.browserChrome.animateAutomaticTabTransition(to: tab) { [weak self] in
-                self?.tabManager.selectTab(at: tabIndex, mode: mode)
-            }
+        captureThumbnail(for: tabManager.selectedTab)
+        tabBar.setPendingExpansion(to: tab)
+        browserChrome.addressBar.animateAutomaticTabTransition(to: tab) { [weak self] in
+            self?.tabManager.selectTab(tab)
         }
     }
     

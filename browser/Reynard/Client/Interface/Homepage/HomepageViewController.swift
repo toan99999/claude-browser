@@ -7,22 +7,8 @@
 
 import UIKit
 
-protocol HomepageViewControllerDelegate: AnyObject {
-    func homepageViewController(_ controller: HomepageViewController, didRequestOpenURL url: URL, disposition: TabOpenDisposition)
-    func homepageViewController(
-        _ controller: HomepageViewController,
-        didRequestShareURL url: URL,
-        sourceView: UIView
-    )
-    func homepageViewController(_ controller: HomepageViewController, didRequestHideFromSuggestions siteID: Int64)
-    func homepageViewController(_ controller: HomepageViewController, didSelectRecentlyClosedTab id: UUID)
-    func homepageViewControllerDidSelectSettings(_ controller: HomepageViewController)
-    func homepageViewControllerDidStartScrolling()
-}
-
 final class HomepageViewController: UINavigationController {
-    weak var homepageDelegate: HomepageViewControllerDelegate?
-    
+    private weak var homepageDelegate: HomepageSectionDelegate?
     private let rootViewController: HomepageRootViewController
     private let bookmarkStore: BookmarkStore
     private var isPrivateBrowsing: Bool
@@ -39,15 +25,20 @@ final class HomepageViewController: UINavigationController {
         return super.preferredStatusBarStyle
     }
     
-    init(bookmarkStore: BookmarkStore = .shared, isPrivateBrowsing: Bool = false) {
+    init(
+        homepageDelegate: HomepageSectionDelegate?,
+        bookmarkStore: BookmarkStore = .shared,
+        isPrivateBrowsing: Bool = false
+    ) {
+        self.homepageDelegate = homepageDelegate
         self.bookmarkStore = bookmarkStore
         self.isPrivateBrowsing = isPrivateBrowsing
         rootViewController = HomepageRootViewController(
+            delegate: homepageDelegate,
             bookmarkStore: bookmarkStore,
             isPrivateBrowsing: isPrivateBrowsing
         )
         super.init(rootViewController: rootViewController)
-        rootViewController.delegate = self
     }
     
     required init?(coder: NSCoder) {
@@ -65,7 +56,6 @@ final class HomepageViewController: UINavigationController {
             guard let viewController = viewController as? HomepageRootViewController else {
                 return
             }
-            viewController.delegate = self
             viewController.setVisibleContentInsets(visibleContentInsets)
         }
     }
@@ -118,6 +108,60 @@ final class HomepageViewController: UINavigationController {
         view.layoutIfNeeded()
     }
     
+    func showFolder(_ folder: BookmarkFolderSnapshot) {
+        let viewController = HomepageRootViewController(
+            delegate: homepageDelegate,
+            bookmarkStore: bookmarkStore,
+            folder: folder,
+            sections: [.favorites],
+            isPrivateBrowsing: isPrivateBrowsing
+        )
+        viewController.setContentMode(contentMode)
+        viewController.setVisibleContentInsets(visibleContentInsets)
+        setNavigationBarHidden(false, animated: false)
+        pushViewController(viewController, animated: true)
+    }
+    
+    // MARK: - Thumbnail
+    
+    func makeThumbnail(size: CGSize, visibleRect: CGRect) -> UIImage {
+        setVisibleContentInsets(UIEdgeInsets(
+            top: max(0, visibleRect.minY),
+            left: 0,
+            bottom: max(0, size.height - visibleRect.maxY),
+            right: 0
+        ))
+        
+        let originalFrame = view.frame
+        let originalBounds = view.bounds
+        let isTemporarilyAttached = view.superview == nil
+        
+        if isTemporarilyAttached {
+            let captureContainer = UIView(frame: CGRect(origin: .zero, size: size))
+            captureContainer.addSubview(view)
+            view.frame = captureContainer.bounds
+            captureContainer.layoutIfNeeded()
+        } else {
+            view.bounds.size = size
+        }
+        view.layoutIfNeeded()
+        
+        let image = UIGraphicsImageRenderer(size: size).image { context in
+            UIColor.systemBackground.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            view.drawHierarchy(in: CGRect(origin: .zero, size: size), afterScreenUpdates: false)
+        }
+        
+        if isTemporarilyAttached {
+            view.removeFromSuperview()
+        }
+        
+        view.bounds = originalBounds
+        view.frame = originalFrame
+        view.layoutIfNeeded()
+        return image
+    }
+    
     // MARK: - Configuration
     
     private func configureAppearance() {
@@ -148,53 +192,5 @@ extension HomepageViewController: UINavigationControllerDelegate {
     func navigationController(_ navigationController: UINavigationController, willShow viewController: UIViewController, animated: Bool) {
         updateNavigationBarAppearance()
         setNavigationBarHidden(viewController === rootViewController, animated: false)
-    }
-}
-
-extension HomepageViewController: HomepageRootViewControllerDelegate {
-    func homepageRootViewController(_ controller: HomepageRootViewController, didRequestOpenURL url: URL, disposition: TabOpenDisposition) {
-        homepageDelegate?.homepageViewController(self, didRequestOpenURL: url, disposition: disposition)
-    }
-    
-    func homepageRootViewController(
-        _ controller: HomepageRootViewController,
-        didRequestShareURL url: URL,
-        sourceView: UIView
-    ) {
-        homepageDelegate?.homepageViewController(
-            self,
-            didRequestShareURL: url,
-            sourceView: sourceView
-        )
-    }
-    
-    func homepageRootViewController(_ controller: HomepageRootViewController, didRequestHideFromSuggestions siteID: Int64) {
-        homepageDelegate?.homepageViewController(self, didRequestHideFromSuggestions: siteID)
-    }
-    
-    func homepageRootViewController(_ controller: HomepageRootViewController, didSelectRecentlyClosedTab id: UUID) {
-        homepageDelegate?.homepageViewController(self, didSelectRecentlyClosedTab: id)
-    }
-    
-    func homepageRootViewControllerDidSelectSettings(_ controller: HomepageRootViewController) {
-        homepageDelegate?.homepageViewControllerDidSelectSettings(self)
-    }
-    
-    func homepageRootViewControllerDidSelectFolder(_ folder: BookmarkFolderSnapshot) {
-        let viewController = HomepageRootViewController(
-            bookmarkStore: bookmarkStore,
-            folder: folder,
-            sections: [.favorites],
-            isPrivateBrowsing: isPrivateBrowsing
-        )
-        viewController.delegate = self
-        viewController.setContentMode(contentMode)
-        viewController.setVisibleContentInsets(visibleContentInsets)
-        setNavigationBarHidden(false, animated: false)
-        pushViewController(viewController, animated: true)
-    }
-    
-    func homepageRootViewControllerDidStartScrolling() {
-        homepageDelegate?.homepageViewControllerDidStartScrolling()
     }
 }

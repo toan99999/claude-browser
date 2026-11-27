@@ -9,6 +9,8 @@ import GeckoView
 import UIKit
 
 struct PermissionPromptPresenter: PermissionPromptPresenting {
+    let window: () -> UIWindow?
+    
     @MainActor
     func request(
         title: String,
@@ -61,7 +63,8 @@ struct PermissionPromptPresenter: PermissionPromptPresenting {
     @MainActor
     private func findPresenter() async -> UIViewController? {
         // 1. Fast path: a foreground-active scene is already up.
-        if let presenter = UIApplication.shared.topViewController(), presenter.view.window != nil {
+        // Multi-window: scope the lookup to this presenter's window (upstream 9f9ae28).
+        if let presenter = UIApplication.shared.topViewController(in: window()), presenter.view.window != nil {
             return presenter
         }
         // 2. The request may have arrived during launch or a transition:
@@ -71,17 +74,19 @@ struct PermissionPromptPresenter: PermissionPromptPresenting {
                 return nil
             }
             try? await Task.sleep(nanoseconds: 250_000_000)
-            if let presenter = UIApplication.shared.topViewController(), presenter.view.window != nil {
+            if let presenter = UIApplication.shared.topViewController(in: window()), presenter.view.window != nil {
                 return presenter
             }
         }
-        // 3. Last resort: any window scene, even one not foreground-active yet.
-        if let rootViewController = UIApplication.shared.connectedScenes
+        // 3. Last resort: any window scene, even one not foreground-active yet —
+        // the presenter's own window first, then the key window.
+        let rootViewController = window()?.rootViewController
+            ?? UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .flatMap(\.windows)
             .first(where: \.isKeyWindow)?
             .rootViewController
-        {
+        if let rootViewController {
             let fallback = UIApplication.shared.topViewController(from: rootViewController)
             if fallback.view.window != nil {
                 return fallback
