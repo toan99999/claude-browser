@@ -1,9 +1,9 @@
 diff --git a/widget/uikit/GeckoKeyboardSupport.mm b/widget/uikit/GeckoKeyboardSupport.mm
 new file mode 100644
-index 000000000000..69466b62683d
+index 000000000000..0885136df59c
 --- /dev/null
 +++ b/widget/uikit/GeckoKeyboardSupport.mm
-@@ -0,0 +1,1098 @@
+@@ -0,0 +1,1099 @@
 +/* This Source Code Form is subject to the terms of the Mozilla Public
 + * License, v. 2.0. If a copy of the MPL was not distributed with this
 + * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -625,7 +625,7 @@ index 000000000000..69466b62683d
 +
 +  WidgetKeyboardEvent keydownEvent(true, eKeyDown, mHandler->mWidget);
 +  InitKeyEvent(aEvent, keydownEvent, 0);
-+  auto heldKey = MakeUnique<HeldKey>();
++  auto heldKey = std::make_unique<HeldKey>();
 +  heldKey->mNativeKeyCode = aEvent.keyCode;
 +  heldKey->mKeyCode = keydownEvent.mKeyCode;
 +  heldKey->mKeyNameIndex = keydownEvent.mKeyNameIndex;
@@ -889,7 +889,7 @@ index 000000000000..69466b62683d
 +      if (alreadyHeld) {
 +        continue;
 +      }
-+      auto heldKey = MakeUnique<HeldKey>();
++      auto heldKey = std::make_unique<HeldKey>();
 +      heldKey->mNativeKeyCode = transition.mNativeKeyCode;
 +      heldKey->mKeyCode = WidgetKeyboardEvent::ComputeKeyCodeFromKeyNameIndex(
 +          transition.mKeyNameIndex);
@@ -999,6 +999,7 @@ index 000000000000..69466b62683d
 +
 +  if ([self isFirstResponder] && isHardwareKeyboardEvent && mGeckoChild &&
 +      !mGeckoChild->Destroyed()) {
++    mGeckoChild->NotifyWindowActivationState(true);
 +    if (mozilla::widget::TextInputHandler* handler =
 +            mGeckoChild->GetTextInputHandler()) {
 +      if (handler->HandleKeyCommand(event)) {
